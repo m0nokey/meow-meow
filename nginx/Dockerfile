@@ -1,6 +1,7 @@
 FROM nginx:alpine
 LABEL org.opencontainers.image.source="https://github.com/m0nokey/meow-meow"
-RUN apk add --no-cache --virtual .utc-build tzdata \
+RUN apk add --no-cache "zlib>=1.4-r0" \
+    && apk add --no-cache --virtual .utc-build tzdata \
     && cp /usr/share/zoneinfo/UTC /tmp/meow-meow-UTC \
     && apk del .utc-build \
     && install -D -m 0644 /tmp/meow-meow-UTC /usr/share/zoneinfo/UTC \

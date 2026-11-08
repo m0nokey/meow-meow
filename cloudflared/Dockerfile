@@ -16,7 +16,7 @@ RUN set -eu; \
 FROM cloudflare/cloudflared:latest AS cloudflared
 FROM alpine:3.24 AS base
 LABEL org.opencontainers.image.source="https://github.com/m0nokey/meow-meow"
-RUN apk add --no-cache bash ca-certificates \
+RUN apk add --no-cache bash ca-certificates "zlib>=1.4-r0" \
     && apk add --no-cache --virtual .utc-build tzdata \
     && cp /usr/share/zoneinfo/UTC /tmp/meow-meow-UTC \
     && apk del .utc-build \
