@@ -1,0 +1,25 @@
+mode: rule
+logbook:
+  enable: false
+listeners:
+  - name: transparent-tcp
+    type: tproxy
+    listen: 127.0.0.1
+    port: 7893
+    firewall: false
+dns:
+  enable: true
+  listen: 127.0.0.1:53
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.19.0.1/16
+  ipv6: false
+  nameserver:
+    - "https://cloudflare-dns.com/dns-query?proxy=tor-relay"
+proxies:
+  - name: tor-relay
+    type: socks5
+    server: @RELAY_IP@
+    port: 9095
+    udp: false
+rules:
+  - MATCH,tor-relay

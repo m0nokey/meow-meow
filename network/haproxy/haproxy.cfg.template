@@ -1,0 +1,25 @@
+global
+    nbthread 2
+    maxconn 1024
+    insecure-fork-wanted
+    external-check
+    external-check preserve-env
+
+defaults
+    mode tcp
+    retries 3
+    timeout connect 5s
+    timeout client 60s
+    timeout server 60s
+    timeout check 10s
+
+frontend socks_proxy
+    bind @HAPROXY_IP@:9095
+    default_backend socks_pool
+
+backend socks_pool
+    option external-check
+    external-check command /usr/local/bin/exit_ready_check
+    option redispatch 1
+    server exit_a @EXIT_A_IP@:9095 check inter 10s rise 1 fall 2
+    server exit_b @EXIT_B_IP@:9095 check inter 10s rise 1 fall 2 backup

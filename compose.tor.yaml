@@ -1,0 +1,151 @@
+x-tor: &tor
+  image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-tor:${MEOW_IMAGE_TAG:-latest}
+  logging:
+    driver: none
+  cpus: 0.5
+  mem_limit: 192m
+  pids_limit: 64
+  init: true
+  stop_signal: SIGTERM
+  stop_grace_period: 5s
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  read_only: true
+  ipc: none
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,noexec,mode=1777
+    - /var/lib/tor:rw,nosuid,nodev,noexec,mode=1777
+  healthcheck:
+    test: [CMD, /usr/local/bin/healthcheck]
+    interval: 30s
+    timeout: 15s
+    retries: 8
+    start_period: 180s
+  restart: unless-stopped
+services:
+  tor_a:
+    <<: *tor
+    build:
+      context: ./network
+      target: tor
+    environment:
+      EXIT_IP: ${TOR_A_IP:?}
+      HAPROXY_IP: ${RELAY_IP:?}
+      TZ: UTC
+    volumes:
+      - exit_a_run:/run/tor
+    networks:
+      external_network:
+        ipv4_address: ${UPLINK_A_IP:?}
+      internal_network:
+        ipv4_address: ${TOR_A_IP:?}
+
+
+  tor_b:
+    <<: *tor
+    environment:
+      EXIT_IP: ${TOR_B_IP:?}
+      HAPROXY_IP: ${RELAY_IP:?}
+      TZ: UTC
+    volumes:
+      - exit_b_run:/run/tor
+    networks:
+      external_network:
+        ipv4_address: ${UPLINK_B_IP:?}
+      internal_network:
+        ipv4_address: ${TOR_B_IP:?}
+
+
+  haproxy:
+    image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-haproxy:${MEOW_IMAGE_TAG:-latest}
+    build:
+      context: ./network
+      target: haproxy
+    logging:
+      driver: none
+    cpus: 0.5
+    mem_limit: 128m
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 2s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    ipc: none
+    pids_limit: 100
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777
+      - /run:rw,nosuid,nodev,noexec,mode=0755
+    environment:
+      HAPROXY_IP: ${RELAY_IP:?}
+      EXIT_A_IP: ${TOR_A_IP:?}
+      EXIT_B_IP: ${TOR_B_IP:?}
+      TZ: UTC
+    volumes:
+      - exit_a_run:/run/tor_a:ro
+      - exit_b_run:/run/tor_b:ro
+    depends_on: [tor_a, tor_b]
+    networks:
+      internal_network:
+        ipv4_address: ${RELAY_IP:?}
+    restart: unless-stopped
+
+
+  nginx:
+    networks:
+      internal_network:
+        ipv4_address: ${ORIGIN_IP:?}
+
+
+  cloudflared:
+    image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-cloudflared-tor:${MEOW_IMAGE_TAG:-latest}
+    build:
+      target: tor
+      args:
+        MEOW_VERSION: ${MEOW_VERSION:?}
+        MEOW_SHA256: ${MEOW_SHA256:?}
+    environment:
+      MEOW_MODE: tor
+      RELAY_IP: ${RELAY_IP:?}
+      ORIGIN_IP: ${ORIGIN_IP:?}
+    cpus: 1.0
+    mem_limit: 384m
+    pids_limit: 128
+    cap_add: [NET_ADMIN, SETUID, SETGID, KILL]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: '53'
+      net.ipv6.conf.all.disable_ipv6: '1'
+      net.ipv6.conf.default.disable_ipv6: '1'
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=32m,mode=1777
+      - /run:rw,nosuid,nodev,noexec,size=1m,mode=0755
+    volumes:
+      - type: bind
+        source: ./cloudflared/resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on: [haproxy]
+    networks:
+      internal_network:
+        ipv4_address: ${TUNNEL_IP:?}
+
+networks:
+  external_network:
+    name: ${MEOW_PROJECT:-meow-meow}_uplink
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${UPLINK_SUBNET:?}
+          gateway: ${UPLINK_GATEWAY:?}
+  internal_network:
+    name: ${MEOW_PROJECT:-meow-meow}_tunnel
+    ipam:
+      config:
+        - subnet: ${TUNNEL_SUBNET:?}
+          gateway: ${TUNNEL_GATEWAY:?}
+
+volumes:
+  exit_a_run:
+  exit_b_run:

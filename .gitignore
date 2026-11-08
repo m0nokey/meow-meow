@@ -1,0 +1,6 @@
+.env
+.DS_Store
+/cloudflared/assets/
+.env.direct
+.env.tor
+/.launch-lock/

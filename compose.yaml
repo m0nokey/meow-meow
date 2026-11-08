@@ -1,0 +1,51 @@
+name: ${MEOW_PROJECT:-meow-meow}
+services:
+  nginx:
+    image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-nginx:${MEOW_IMAGE_TAG:-latest}
+    build: ./nginx
+    environment:
+      TZ: UTC
+    logging:
+      driver: none
+    cpus: 0.5
+    mem_limit: 64m
+    pids_limit: 32
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    ipc: none
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777
+    volumes:
+      - type: bind
+        source: ./nginx/html
+        target: /usr/share/nginx/html
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      internal_network: {}
+    restart: unless-stopped
+
+
+  cloudflared:
+    build:
+      context: ./cloudflared
+    environment:
+      TZ: UTC
+    logging:
+      driver: none
+    init: true
+    stop_grace_period: 10s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    ipc: none
+    depends_on: [nginx]
+    restart: unless-stopped
+
+networks:
+  internal_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false

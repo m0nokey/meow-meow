@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!start-tunnel.sh
+!meow.yaml
+!assets/
+!assets/meow-*.tar.gz
