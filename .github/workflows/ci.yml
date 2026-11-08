@@ -152,6 +152,12 @@ jobs:
           GRYPE: ${{ steps.grype.outputs.cmd }}
         run: bash .github/scripts/scan-images.sh "$GRYPE" "$ARCHITECTURE" "$IMAGE_TAG" build
 
+      - name: Write security summary
+        if: always() && hashFiles('security-reports/**/*.sarif') != ''
+        run: |
+          python3 .github/scripts/security-summary.py security-reports/before-vex
+          python3 .github/scripts/security-summary.py security-reports/verified
+
       - name: Upload security reports
         if: always() && hashFiles('security-reports/*.json') != ''
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.1
@@ -277,6 +283,12 @@ jobs:
           GRYPE: ${{ steps.grype.outputs.cmd }}
         run: bash .github/scripts/scan-images.sh "$GRYPE" "$ARCHITECTURE" latest latest
 
+      - name: Write security summary
+        if: always() && hashFiles('security-reports/**/*.sarif') != ''
+        run: |
+          python3 .github/scripts/security-summary.py security-reports/before-vex
+          python3 .github/scripts/security-summary.py security-reports/verified
+
       - name: Upload security reports
         if: always() && hashFiles('security-reports/*.json') != ''
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.1
@@ -309,6 +321,6 @@ jobs:
           merge-multiple: true
 
       - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
-        if: hashFiles('security-reports/*.sarif') != ''
+        if: hashFiles('security-reports/verified/*.sarif') != ''
         with:
-          sarif_file: security-reports
+          sarif_file: security-reports/verified

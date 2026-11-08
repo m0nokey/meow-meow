@@ -8,21 +8,18 @@ grype=$1
 architecture=$2
 tag=$3
 report_scope=$4
-mkdir -p security-reports
+mkdir -p security-reports/before-vex security-reports/verified
 "$grype" db update
 export GRYPE_DB_AUTO_UPDATE=false
 
 status=0
-{
-    printf '### Image vulnerability scan (%s)\n\n' "$architecture"
-    printf '| Image | Findings before VEX | Fixable medium or higher |\n'
-    printf '| --- | ---: | --- |\n'
-} >> "$GITHUB_STEP_SUMMARY"
-
 for image in "${images[@]}"; do
     reference="$IMAGE_REGISTRY/meow-meow-$image:$tag"
     image_id=$(docker image inspect --format '{{.Id}}' "$reference")
-    report="security-reports/grype-$image-$architecture"
+    report_name="grype-$image-$architecture"
+    report="security-reports/$report_name"
+    raw_sarif="security-reports/before-vex/$report_name.sarif"
+    verified_sarif="security-reports/verified/$report_name.sarif"
     if [[ $image == tor || $image == haproxy ]]; then
         scan_tag="meow-vex.local/meow-meow-$image:${image_id#sha256:}"
         docker image tag "$image_id" "$scan_tag"
@@ -40,16 +37,17 @@ for image in "${images[@]}"; do
         fi
     fi
 
-    "$grype" "${scan_args[@]}" -o sarif |
+    "$grype" "$target" -o sarif > "$raw_sarif"
+    if [[ ${#scan_args[@]} -gt 1 ]]; then
+        "$grype" "${scan_args[@]}" -o sarif
+    else
+        cat "$raw_sarif"
+    fi |
         jq --arg id "meow-meow/$report_scope/$image/$architecture/" \
-            '.runs[].automationDetails.id = $id' > "$report.sarif"
-    result=pass
+            '.runs[].automationDetails.id = $id' > "$verified_sarif"
     if ! "$grype" "${scan_args[@]}" --only-fixed --fail-on medium; then
         status=1
-        result=fail
     fi
-    findings=$(jq '.matches | length' "$report.json")
-    printf '| %s | %s | %s |\n' "$image" "$findings" "$result" >> "$GITHUB_STEP_SUMMARY"
 done
 
 exit "$status"
