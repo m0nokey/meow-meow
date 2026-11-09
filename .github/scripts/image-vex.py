@@ -20,43 +20,18 @@ def check_image(image_id, entrypoint, *args, stdin=None):
     return result.returncode == 0
 
 
-def verified_findings(image_id, network_runtime):
+def verified_python(image_id, interpreter, package):
     findings = {}
-    if check_image(
-        image_id, "/bin/sh", "-ec",
-        'applets="$(busybox --list)"; ! echo "$applets" | grep -qx wget && ! command -v wget',
-    ):
-        for package in ("busybox", "busybox-binsh"):
-            findings[("CVE-2025-60876", package, "1.37.0-r31")] = (
-                "not_affected",
-                "The BusyBox wget applet is disabled and no wget command is installed.",
-            )
-        if check_image(image_id, "/bin/sh", "-ec", "test ! -e /usr/bin/ssl_client && ! command -v ssl_client"):
-            findings[("CVE-2025-60876", "ssl_client", "1.37.0-r31")] = (
-                "not_affected",
-                "Both the BusyBox wget applet and the ssl_client executable are absent.",
-            )
-
-    if not network_runtime:
-        return findings
-
-    if check_image(image_id, "/bin/sh", "-ec", "! command -v sqlite3"):
-        findings[("CVE-2026-119586", "sqlite-libs", "3.54.1-r0")] = (
-            "not_affected",
-            "The SQLite command-line shell containing .recover is absent.",
-        )
-
-    test = Path(__file__).resolve().parents[2] / "network" / "runtime" / "verify-python.py"
-    if check_image(image_id, "/usr/bin/python3", "-I", "-", stdin=test.read_text()):
+    runtime = Path(__file__).resolve().parents[2] / "network" / "runtime"
+    if check_image(image_id, interpreter, "-I", "-", stdin=(runtime / "verify-python.py").read_text()):
         for cve, fix in (
             ("CVE-2025-15367", "POP3 commands reject control characters."),
-            ("CVE-2026-103995", "HTTP chunk sizes reject non-hex framing."),
+            ("CVE-2026-103995", "HTTP framing rejects invalid lengths and chunk sizes."),
         ):
-            findings[(cve, "python3", "3.14.10-r1")] = ("fixed", fix)
+            findings[(cve, *package)] = ("fixed", fix)
 
-    test = Path(__file__).resolve().parents[2] / "network" / "runtime" / "verify-socket.py"
-    if check_image(image_id, "/usr/bin/python3", "-I", "-", stdin=test.read_text()):
-        findings[("CVE-2026-116566", "python3", "3.14.10-r1")] = (
+    if check_image(image_id, interpreter, "-I", "-", stdin=(runtime / "verify-socket.py").read_text()):
+        findings[("CVE-2026-116566", *package)] = (
             "fixed",
             "The rebuilt native _socket module rejects NUL bytes in host and port. "
             "Numeric resolution and socket I/O also pass the runtime tests. "
@@ -65,13 +40,46 @@ def verified_findings(image_id, network_runtime):
     return findings
 
 
+def verified_findings(image_id, name):
+    if name == "meow-meow-synapse":
+        return verified_python(image_id, "/usr/local/bin/python3", ("binary", "python", "3.13.18"))
+
+    findings = {}
+    if check_image(
+        image_id, "/bin/sh", "-ec",
+        'applets="$(busybox --list)"; ! echo "$applets" | grep -qx wget && ! command -v wget',
+    ):
+        for package in ("busybox", "busybox-binsh"):
+            findings[("CVE-2025-60876", "apk", package, "1.37.0-r31")] = (
+                "not_affected",
+                "The BusyBox wget applet is disabled and no wget command is installed.",
+            )
+        if check_image(image_id, "/bin/sh", "-ec", "test ! -e /usr/bin/ssl_client && ! command -v ssl_client"):
+            findings[("CVE-2025-60876", "apk", "ssl_client", "1.37.0-r31")] = (
+                "not_affected",
+                "Both the BusyBox wget applet and the ssl_client executable are absent.",
+            )
+
+    if name not in {"meow-meow-tor", "meow-meow-haproxy"}:
+        return findings
+
+    if check_image(image_id, "/bin/sh", "-ec", "! command -v sqlite3"):
+        findings[("CVE-2026-119586", "apk", "sqlite-libs", "3.54.1-r0")] = (
+            "not_affected",
+            "The SQLite command-line shell containing .recover is absent.",
+        )
+
+    findings.update(verified_python(image_id, "/usr/bin/python3", ("apk", "python3", "3.14.10-r1")))
+    return findings
+
+
 def build_statements(matches, verified, product):
     components = defaultdict(set)
     for match in matches:
         package = match["artifact"]
         cve = match["vulnerability"]["id"]
-        key = (cve, package["name"], package["version"])
-        if package["type"] == "apk" and package.get("purl") and key in verified:
+        key = (cve, package["type"], package["name"], package["version"])
+        if package.get("purl") and key in verified:
             status, explanation = verified[key]
             components[(cve, status, explanation)].add(package["purl"])
 
@@ -112,7 +120,7 @@ def main():
         raise SystemExit("Raw Grype report does not identify the verified image")
 
     product = f"pkg:oci/{name}?repository_url={quote(repository, safe='')}&tag={tag}"
-    verified = verified_findings(args.image_id, name in {"meow-meow-tor", "meow-meow-haproxy"})
+    verified = verified_findings(args.image_id, name)
     statements = build_statements(report["matches"], verified, product)
     if statements:
         document = {

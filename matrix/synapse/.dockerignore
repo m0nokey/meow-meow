@@ -1,3 +1,4 @@
 *
 !Dockerfile
+!cpython-security.patch
 !requirements-security.txt

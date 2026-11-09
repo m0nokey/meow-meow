@@ -26,7 +26,7 @@ for image in "${images[@]}"; do
 
     "$grype" "$target" -o json > "$report.json"
     scan_args=("$target")
-    if [[ $image != synapse && $image != postgres ]]; then
+    if [[ $image != postgres ]]; then
         python3 .github/scripts/image-vex.py "$image_id" "$scan_tag" "$report.json" "$report.openvex.json"
         if [[ -s $report.openvex.json ]]; then
             scan_args+=(--vex "$report.openvex.json")

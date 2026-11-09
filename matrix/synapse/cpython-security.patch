@@ -1,0 +1,118 @@
+# CPython 3.13.18 security backports.
+# POP3 (CVE-2025-15367): https://github.com/python/cpython/pull/143924
+# HTTP (CVE-2026-103995): https://github.com/python/cpython/pull/150752
+# Native socket (CVE-2026-116566): https://github.com/python/cpython/pull/160974
+
+--- a/Lib/poplib.py
++++ b/Lib/poplib.py
+@@ -122,6 +122,8 @@
+     def _putcmd(self, line):
+         if self._debugging: print('*cmd*', repr(line))
+         line = bytes(line, self.encoding)
++        if re.search(b'[\x00-\x1F\x7F]', line):
++            raise ValueError('Control characters not allowed in commands')
+         self._putline(line)
+
+
+--- a/Lib/http/client.py
++++ b/Lib/http/client.py
+@@ -165,6 +165,10 @@
+ # to prevent http header injection.
+ _contains_disallowed_method_pchar_re = re.compile('[\x00-\x1f]')
+
++# RFC 9112 permits only decimal Content-Length and hex chunk-size digits.
++_is_legal_content_length = re.compile(r'[0-9]+').fullmatch
++_is_legal_chunk_size = re.compile(rb'[0-9a-fA-F]+').fullmatch
++
+ # We always set the Content-Length header for these methods because some
+ # servers will otherwise respond with a 411
+ _METHODS_EXPECTING_BODY = {'PATCH', 'POST', 'PUT'}
+@@ -383,16 +387,11 @@
+         # NOTE: RFC 2616, S4.4, #3 says we ignore this if tr_enc is "chunked"
+         self.length = None
+         length = self.headers.get("content-length")
+-        if length and not self.chunked:
++        if length and not self.chunked and _is_legal_content_length(length):
+             try:
+                 self.length = int(length)
+             except ValueError:
+                 self.length = None
+-            else:
+-                if self.length < 0:  # ignore nonsensical negative lengths
+-                    self.length = None
+-        else:
+-            self.length = None
+
+         # does the body have a fixed length? (of zero)
+         if (status == NO_CONTENT or status == NOT_MODIFIED or
+@@ -557,7 +556,10 @@
+         i = line.find(b";")
+         if i >= 0:
+             line = line[:i] # strip chunk-extensions
++        line = line.rstrip()
+         try:
++            if not _is_legal_chunk_size(line):
++                raise ValueError("invalid chunk size")
+             return int(line, 16)
+         except ValueError:
+             # close the connection as protocol synchronisation is
+--- a/Modules/socketmodule.c
++++ b/Modules/socketmodule.c
+@@ -6755,6 +6755,7 @@
+     PyObject *pobj = (PyObject *)NULL;
+     PyObject *pstr = NULL;
+     const char *hptr, *pptr;
++    Py_ssize_t hlen = 0, plen = 0;
+     int family, socktype, protocol, flags;
+     int error;
+     PyObject *all = (PyObject *)NULL;
+@@ -6775,33 +6776,46 @@
+             return NULL;
+         assert(PyBytes_Check(idna));
+         hptr = PyBytes_AS_STRING(idna);
++        hlen = PyBytes_GET_SIZE(idna);
+     } else if (PyBytes_Check(hobj)) {
+-        hptr = PyBytes_AsString(hobj);
++        hptr = PyBytes_AS_STRING(hobj);
++        hlen = PyBytes_GET_SIZE(hobj);
+     } else {
+         PyErr_SetString(PyExc_TypeError,
+                         "getaddrinfo() argument 1 must be string or None");
+         return NULL;
++    }
++    if (hptr != NULL && strlen(hptr) != (size_t)hlen) {
++        PyErr_SetString(PyExc_ValueError,
++                        "getaddrinfo() host must not contain null characters");
++        goto err;
+     }
+     if (PyLong_CheckExact(pobj)) {
+         pstr = PyObject_Str(pobj);
+         if (pstr == NULL)
+             goto err;
+         assert(PyUnicode_Check(pstr));
+-        pptr = PyUnicode_AsUTF8(pstr);
++        pptr = PyUnicode_AsUTF8AndSize(pstr, &plen);
+         if (pptr == NULL)
+             goto err;
+     } else if (PyUnicode_Check(pobj)) {
+-        pptr = PyUnicode_AsUTF8(pobj);
++        pptr = PyUnicode_AsUTF8AndSize(pobj, &plen);
+         if (pptr == NULL)
+             goto err;
+     } else if (PyBytes_Check(pobj)) {
+         pptr = PyBytes_AS_STRING(pobj);
++        plen = PyBytes_GET_SIZE(pobj);
+     } else if (pobj == Py_None) {
+         pptr = (char *)NULL;
+     } else {
+         PyErr_SetString(PyExc_OSError, "Int or String expected");
+         goto err;
+     }
++    if (pptr != NULL && strlen(pptr) != (size_t)plen) {
++        PyErr_SetString(PyExc_ValueError,
++                        "getaddrinfo() port must not contain null characters");
++        goto err;
++    }
+ #if defined(__APPLE__) && defined(AI_NUMERICSERV)
+     if ((flags & AI_NUMERICSERV) && (pptr == NULL || (pptr[0] == '0' && pptr[1] == 0))) {
+         /* On OSX up to at least OSX 10.8 getaddrinfo crashes
