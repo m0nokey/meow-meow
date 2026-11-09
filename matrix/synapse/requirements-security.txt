@@ -1,4 +1,9 @@
-# Patched versions of dependencies bundled by the pinned Synapse image.
+# Keep this release aligned with the upstream entrypoint in the Dockerfile.
+matrix-synapse[postgres]==1.164.2
+psycopg2==2.9.11
+zope-interface==8.2
+
+# Security pins for runtime dependencies.
 Authlib==1.9.5
 Twisted==26.10.0
 msgpack==1.2.4

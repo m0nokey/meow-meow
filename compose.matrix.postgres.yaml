@@ -6,7 +6,10 @@ services:
 
   postgres:
     image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-postgres:${MEOW_IMAGE_TAG:-latest}
-    build: ./matrix/postgres
+    build:
+      context: ./matrix/postgres
+      additional_contexts:
+        network_source: ./network
     command: [postgres, -c, hba_file=/etc/meow-pg-hba.conf, -c, max_connections=32]
     environment:
       TZ: UTC

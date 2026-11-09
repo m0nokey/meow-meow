@@ -9,7 +9,10 @@ services:
 
   synapse:
     image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-synapse:${MEOW_IMAGE_TAG:-latest}
-    build: ./matrix/synapse
+    build:
+      context: ./matrix/synapse
+      additional_contexts:
+        network_source: ./network
     environment:
       TZ: UTC
       SYNAPSE_LOG_LEVEL: WARNING

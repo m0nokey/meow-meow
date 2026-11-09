@@ -7,7 +7,7 @@ project="meow-matrix-test-$(basename "$runtime" | tr '[:upper:]' '[:lower:]' | t
 export MEOW_IMAGE_PREFIX="${IMAGE_REGISTRY:+${IMAGE_REGISTRY%/}/}meow-meow"
 export MEOW_IMAGE_TAG=${IMAGE_TAG:-local}
 cp compose.yaml compose.direct.yaml compose.matrix.yaml compose.matrix.postgres.yaml "$runtime/"
-cp -R matrix nginx "$runtime/"
+cp -R matrix nginx network "$runtime/"
 cd "$runtime"
 
 base() {

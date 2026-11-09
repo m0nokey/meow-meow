@@ -41,9 +41,6 @@ def verified_python(image_id, interpreter, package):
 
 
 def verified_findings(image_id, name):
-    if name == "meow-meow-synapse":
-        return verified_python(image_id, "/usr/local/bin/python3", ("binary", "python", "3.13.18"))
-
     findings = {}
     if check_image(
         image_id, "/bin/sh", "-ec",
@@ -60,16 +57,22 @@ def verified_findings(image_id, name):
                 "Both the BusyBox wget applet and the ssl_client executable are absent.",
             )
 
-    if name not in {"meow-meow-tor", "meow-meow-haproxy"}:
+    if name == "meow-meow-synapse":
+        python_runtime = ("/usr/local/bin/python3", ("binary", "python", "3.13.18"))
+        sqlite_version = "3.53.4-r0"
+    elif name in {"meow-meow-tor", "meow-meow-haproxy"}:
+        python_runtime = ("/usr/bin/python3", ("apk", "python3", "3.14.10-r1"))
+        sqlite_version = "3.54.1-r0"
+    else:
         return findings
 
-    if check_image(image_id, "/bin/sh", "-ec", "! command -v sqlite3"):
-        findings[("CVE-2026-119586", "apk", "sqlite-libs", "3.54.1-r0")] = (
+    if check_image(image_id, "/bin/sh", "-ec", "! command -v sqlite3 && test ! -e /usr/bin/sqlite3"):
+        findings[("CVE-2026-119586", "apk", "sqlite-libs", sqlite_version)] = (
             "not_affected",
             "The SQLite command-line shell containing .recover is absent.",
         )
 
-    findings.update(verified_python(image_id, "/usr/bin/python3", ("apk", "python3", "3.14.10-r1")))
+    findings.update(verified_python(image_id, *python_runtime))
     return findings
 
 

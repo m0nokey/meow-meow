@@ -1,12 +1,19 @@
-# syntax=docker/dockerfile:1.19
+# syntax=docker/dockerfile:1.7
 FROM matrixdotorg/synapse:v1.164.2 AS upstream
 
-FROM python:3.13.18-slim-trixie AS python-base
+FROM alpine:3.24 AS busybox-builder
+ARG APORTS_COMMIT=35f5eb2864e50dd4448758d31f3e2a32f733ab84
+RUN apk add --no-cache build-base bzip2 ca-certificates curl git linux-headers \
+        openssl-dev patch python3
+COPY --from=network_source runtime/build-busybox.sh runtime/minimize-busybox.py runtime/busybox-applets.txt /build-config/
+WORKDIR /src
+RUN /bin/sh /build-config/build-busybox.sh
 
-FROM python-base AS python-security
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl gcc libc6-dev libbluetooth-dev patch xz-utils
-COPY cpython-security.patch /tmp/cpython-security.patch
+FROM python:3.13.18-alpine3.24 AS python-base
+
+FROM python-base AS build
+RUN apk add --no-cache bluez-dev build-base curl libpq-dev linux-headers patch xz
+COPY cpython-security.patch requirements-security.txt /tmp/
 WORKDIR /tmp
 RUN set -eu; \
     archive="Python-${PYTHON_VERSION}.tar.xz"; \
@@ -24,25 +31,23 @@ RUN set -eu; \
     gcc -shared -fPIC -O2 -Werror=implicit-function-declaration \
         -I"$PWD/Modules" -I"$(python -c 'import sysconfig; print(sysconfig.get_path("include"))')/internal" \
         $(python3-config --includes) Modules/socketmodule.c -o "/out$socket_module"
+RUN python -m pip install --no-cache-dir --only-binary=:all: --no-binary=psycopg2,zope-interface \
+    --prefix /out/usr/local -r /tmp/requirements-security.txt
 
 FROM python-base
 LABEL org.opencontainers.image.source="https://github.com/m0nokey/meow-meow"
-COPY --from=upstream --exclude=python* /usr/local/bin/ /usr/local/bin/
-COPY --from=upstream /usr/local/lib/python3.13/site-packages/ /usr/local/lib/python3.13/site-packages/
+RUN apk upgrade --no-cache && apk add --no-cache libpq "zlib>=1.4-r0"
 COPY --from=upstream /start.py /start.py
 COPY --from=upstream /conf/ /conf/
-COPY --from=python-security /out/ /
-COPY requirements-security.txt /tmp/requirements-security.txt
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends libjemalloc2 libjpeg62-turbo libpq5 libwebp7 \
-    && rm -rf /var/lib/apt/lists/* \
+COPY --from=build /out/ /
+RUN python -m pip check \
     && rm -f /usr/local/lib/python3.13/__pycache__/poplib.*.pyc /usr/local/lib/python3.13/http/__pycache__/client.*.pyc \
-    && python -m pip install --no-cache-dir --only-binary=:all: -r /tmp/requirements-security.txt \
-    && python -m pip check \
     && python -m pip uninstall -y pip \
-    && rm /tmp/requirements-security.txt \
+    && addgroup -S -g 991 synapse && adduser -S -D -H -u 991 -G synapse synapse \
     && install -d -m 0700 -o 991 -g 991 /data
+COPY --from=busybox-builder /out/busybox /bin/busybox
+RUN --mount=type=bind,from=network_source,source=runtime,target=/build-config \
+    /bin/sh /build-config/prune-busybox-links.sh && rm -f /usr/bin/ssl_client
 USER 991:991
 VOLUME /data
 EXPOSE 8008/tcp
