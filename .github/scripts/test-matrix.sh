@@ -106,3 +106,4 @@ test "$(legacy run --rm -T --no-deps --entrypoint python synapse - database < ma
 legacy run --rm -T --no-deps -e SYNAPSE_SERVER_NAME="$hostname" \
     --entrypoint python synapse - < matrix/setup.py
 legacy up -d --no-deps --wait --wait-timeout 90 synapse
+legacy exec -T synapse python -c 'import sqlite3; assert sqlite3.sqlite_version_info >= (3, 54, 1), sqlite3.sqlite_version'

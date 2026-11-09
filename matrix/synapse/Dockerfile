@@ -36,7 +36,10 @@ RUN python -m pip install --no-cache-dir --only-binary=:all: --no-binary=psycopg
 
 FROM python-base
 LABEL org.opencontainers.image.source="https://github.com/m0nokey/meow-meow"
-RUN apk upgrade --no-cache && apk add --no-cache libpq "zlib>=1.4-r0"
+RUN apk upgrade --no-cache \
+    && apk add --no-cache libpq "zlib>=1.4-r0" \
+    && apk add --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/main \
+        "sqlite-libs>=3.54.1-r0"
 COPY --from=upstream /start.py /start.py
 COPY --from=upstream /conf/ /conf/
 COPY --from=build /out/ /

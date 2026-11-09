@@ -59,15 +59,13 @@ def verified_findings(image_id, name):
 
     if name == "meow-meow-synapse":
         python_runtime = ("/usr/local/bin/python3", ("binary", "python", "3.13.18"))
-        sqlite_version = "3.53.4-r0"
     elif name in {"meow-meow-tor", "meow-meow-haproxy"}:
         python_runtime = ("/usr/bin/python3", ("apk", "python3", "3.14.10-r1"))
-        sqlite_version = "3.54.1-r0"
     else:
         return findings
 
     if check_image(image_id, "/bin/sh", "-ec", "! command -v sqlite3 && test ! -e /usr/bin/sqlite3"):
-        findings[("CVE-2026-119586", "apk", "sqlite-libs", sqlite_version)] = (
+        findings[("CVE-2026-119586", "apk", "sqlite-libs", "3.54.1-r0")] = (
             "not_affected",
             "The SQLite command-line shell containing .recover is absent.",
         )
