@@ -5,3 +5,4 @@
 .env.tor
 /.launch-lock/
 /.launching/
+/.matrix-secrets/

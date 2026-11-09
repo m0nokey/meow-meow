@@ -1,0 +1,57 @@
+services:
+  synapse:
+    networks:
+      matrix_database: {}
+
+
+  postgres:
+    image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-postgres:${MEOW_IMAGE_TAG:-latest}
+    build: ./matrix/postgres
+    command: [postgres, -c, hba_file=/etc/meow-pg-hba.conf, -c, max_connections=32]
+    environment:
+      TZ: UTC
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/postgres-password
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C --auth-local=peer --auth-host=scram-sha-256
+    cpus: 0.75
+    mem_limit: 256m
+    pids_limit: 64
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    logging:
+      driver: none
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777
+      - /var/run/postgresql:rw,nosuid,nodev,noexec,size=1m,uid=70,gid=70,mode=0775
+    volumes:
+      - matrix_postgres:/var/lib/postgresql
+      - type: bind
+        source: ./.matrix-secrets/postgres
+        target: /run/postgres-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.matrix-secrets/synapse
+        target: /run/synapse-db-password
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      matrix_database: {}
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, synapse, -d, synapse]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+networks:
+  matrix_database:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+
+volumes:
+  matrix_postgres:

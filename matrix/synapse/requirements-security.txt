@@ -1,0 +1,8 @@
+# Patched versions of dependencies bundled by the pinned Synapse image.
+Authlib==1.9.5
+Twisted==26.10.0
+msgpack==1.2.4
+pyasn1==0.6.5
+setuptools==84.2.1
+tornado==6.6
+urllib3==2.8.0

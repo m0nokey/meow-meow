@@ -53,7 +53,9 @@ bash matrix/invite.sh direct
 
 An invitation link is valid for one registration within one hour. New users choose their own username and password. To start a direct chat, enter the other person's full Matrix ID (`@username:<tunnel-hostname>`) in Element X.
 
-The homepage displays the animated logo. Matrix routes require a supported Element User-Agent, and the browser invitation page uses separate registration routes. Synapse runs on an isolated network with no host ports. This profile provides messaging and file sharing. Voice and video calls are outside this profile.
+The homepage displays the animated logo. Matrix routes require a supported Element User-Agent, and the browser invitation page uses separate registration routes. Synapse and PostgreSQL run as non-root with read-only root filesystems and no Linux capabilities. Only Synapse and PostgreSQL share the database network, and no host ports are published. The PostgreSQL application role uses SCRAM and has no superuser privileges. The invitation command creates a temporary administrator and deactivates it after issuing the link. The password is only held in memory by the issuer.
+
+New Matrix deployments use PostgreSQL 18.6. Existing SQLite deployments keep using SQLite until they are migrated. Keep the generated `.matrix-secrets` directory with the PostgreSQL backup. This profile provides messaging and file sharing. Voice and video calls are outside this profile.
 
 Keep the tunnel running while using the test instance. A newly created Quick Tunnel gets a different hostname, and the launcher preserves the database if the hostname no longer matches. The two modes are separate homeservers, so their accounts and rooms are separate.
 
@@ -65,8 +67,8 @@ The launcher pulls `latest` from GHCR by default. If the images are unavailable,
 IMAGE_MODE=build IMAGE_REGISTRY= IMAGE_TAG=local bash ./run.sh
 ```
 
-Set `IMAGE_TAG=<commit-sha>` to select a specific published build. After the first publication, the repository owner must make the five GHCR packages public to enable anonymous pulls.
+Add `direct matrix` or `tor matrix` to the local build command to also build the images needed for the Matrix profile. Set `IMAGE_TAG=<commit-sha>` to select a specific published build. After the first publication, the repository owner must make the GHCR packages public to enable anonymous pulls.
 
 ## CI
 
-[Meow Meow CI](.github/workflows/ci.yml) builds and tests both modes on native `amd64` and `arm64` runners. It publishes five multi-architecture images from `main` after the checks pass. Grype blocks publication on fixable medium, high, or critical vulnerabilities and rescans `latest` daily at **03:17 UTC**. Scan reports are available in GitHub Code scanning and as workflow artifacts.
+[Meow Meow CI](.github/workflows/ci.yml) builds and tests both modes on native `amd64` and `arm64` runners. It publishes seven multi-architecture images from `main`, including Synapse and PostgreSQL, after the checks pass. Grype blocks publication on fixable medium, high, or critical vulnerabilities and rescans `latest` daily at **03:17 UTC**. Scan reports are available in GitHub Code scanning and as workflow artifacts.

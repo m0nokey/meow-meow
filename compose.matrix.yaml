@@ -8,7 +8,8 @@ services:
 
 
   synapse:
-    image: matrixdotorg/synapse:v1.164.2
+    image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-synapse:${MEOW_IMAGE_TAG:-latest}
+    build: ./matrix/synapse
     environment:
       TZ: UTC
       SYNAPSE_LOG_LEVEL: WARNING
@@ -17,12 +18,16 @@ services:
     cpus: 1.0
     mem_limit: 512m
     pids_limit: 96
+    cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+    read_only: true
     ipc: none
     logging:
       driver: none
     volumes:
       - matrix_data:/data
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=32m,mode=1777
     networks:
       matrix_backend:
         aliases: [matrix-origin]
@@ -32,6 +37,22 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+
+
+  matrix-invite:
+    image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-synapse:${MEOW_IMAGE_TAG:-latest}
+    profiles: [operator]
+    user: '0:0'
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    ipc: none
+    logging:
+      driver: none
+    volumes:
+      - matrix_data:/data:ro
+    networks: [matrix_backend]
 
 networks:
   matrix_backend:

@@ -109,8 +109,9 @@ if [[ $project != "$source_dir" ]]; then
     done
     cp "$source_dir/nginx/.dockerignore" "$source_dir/nginx/Dockerfile" "$source_dir/nginx/nginx.conf" "$project/nginx/"
     if [[ $workload == matrix ]]; then
-        cp "$source_dir/compose.matrix.yaml" "$project/"
+        cp "$source_dir/compose.matrix.yaml" "$source_dir/compose.matrix.postgres.yaml" "$project/"
         mkdir -p "$project/matrix"
+        cp -R "$source_dir/matrix/synapse" "$source_dir/matrix/postgres" "$project/matrix/"
         for config in setup.py invite.py invite.sh join.html nginx.conf; do
             cp "$source_dir/matrix/$config" "$project/matrix/"
         done
@@ -163,7 +164,7 @@ else
     fi
     compose build cloudflared nginx
     if [[ $workload == matrix ]]; then
-        compose pull synapse
+        compose build synapse
     fi
 fi
 
@@ -181,8 +182,36 @@ if [[ $workload == matrix ]]; then
         printf 'The Cloudflare tunnel is not ready. Run the same command to retry.\n' >&2
         exit 1
     fi
-    compose run --rm -T --no-deps -e "SYNAPSE_SERVER_NAME=${url#https://}" \
-        --entrypoint python synapse - < matrix/setup.py
+    database=$(compose run --rm -T --no-deps --entrypoint python synapse - database < matrix/setup.py)
+    if [[ $database == postgres ]]; then
+        if docker volume inspect "${compose_name}_matrix_postgres" >/dev/null 2>&1 &&
+            [[ ! -s .matrix-secrets/postgres || ! -s .matrix-secrets/synapse ]]; then
+            printf 'Restore the original .matrix-secrets files for the existing PostgreSQL volume.\n' >&2
+            exit 1
+        fi
+        (umask 077; mkdir -p .matrix-secrets)
+        chmod 700 .matrix-secrets
+        for role in postgres synapse; do
+            if [[ ! -s .matrix-secrets/$role ]]; then
+                (umask 077; od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > ".matrix-secrets/$role.tmp")
+                chmod 444 ".matrix-secrets/$role.tmp"
+                mv ".matrix-secrets/$role.tmp" ".matrix-secrets/$role"
+            fi
+        done
+        compose_args+=(-f compose.matrix.postgres.yaml)
+        if [[ $image_mode == pull ]]; then
+            compose pull --policy always postgres
+        else
+            compose build postgres
+        fi
+        compose run --rm -T --no-deps -e "SYNAPSE_SERVER_NAME=${url#https://}" \
+            -v "$project/.matrix-secrets/synapse:/run/synapse-db-password:ro" \
+            --entrypoint python synapse - < matrix/setup.py
+        compose up -d --no-build --pull never --wait --wait-timeout 90 postgres
+    else
+        compose run --rm -T --no-deps -e "SYNAPSE_SERVER_NAME=${url#https://}" \
+            --entrypoint python synapse - < matrix/setup.py
+    fi
     compose up -d --no-deps --wait --wait-timeout 90 synapse
     printf 'Element X account provider: %s\n' "$url"
 else

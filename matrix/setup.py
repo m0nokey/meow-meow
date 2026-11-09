@@ -8,14 +8,36 @@ import yaml
 
 
 CONFIG = Path("/data/homeserver.yaml")
+DB_PASSWORD = Path("/run/synapse-db-password")
 
 
 def configure():
     hostname = os.environ["SYNAPSE_SERVER_NAME"]
-    if not CONFIG.exists():
-        subprocess.run(["/start.py", "generate"], check=True)
-
-    config = yaml.safe_load(CONFIG.read_text())
+    if CONFIG.exists():
+        config = yaml.safe_load(CONFIG.read_text())
+        if config.get("database", {}).get("name") == "psycopg2":
+            if config["database"]["args"]["password"] != DB_PASSWORD.read_text().strip():
+                sys.exit("The PostgreSQL password file does not match the existing Synapse configuration.")
+    else:
+        generated = CONFIG.with_name(".generated-homeserver.yaml")
+        generated.unlink(missing_ok=True)
+        subprocess.run(
+            ["/start.py", "generate"], check=True,
+            env={**os.environ, "SYNAPSE_CONFIG_PATH": str(generated)},
+        )
+        config = yaml.safe_load(generated.read_text())
+        generated.unlink()
+        config["database"] = {
+            "name": "psycopg2",
+            "args": {
+                "host": "postgres",
+                "database": "synapse",
+                "user": "synapse",
+                "password": DB_PASSWORD.read_text().strip(),
+                "cp_min": 1,
+                "cp_max": 5,
+            },
+        }
     if config["server_name"] != hostname:
         sys.exit(
             f"This test database belongs to {config['server_name']}, "
@@ -38,13 +60,18 @@ def configure():
             listener["x_forwarded"] = True
             listener["resources"] = [{"names": ["client"]}]
 
-    stat = CONFIG.stat()
     temporary = CONFIG.with_suffix(".tmp")
     temporary.touch(mode=0o600)
     temporary.write_text(yaml.safe_dump(config, sort_keys=False))
     temporary.chmod(0o600)
-    os.chown(temporary, stat.st_uid, stat.st_gid)
     temporary.replace(CONFIG)
 
 
-configure()
+if sys.argv[1:] == ["database"]:
+    if CONFIG.exists():
+        database = yaml.safe_load(CONFIG.read_text()).get("database", {})
+        print({"sqlite3": "sqlite", "psycopg2": "postgres"}[database.get("name", "sqlite3")])
+    else:
+        print("postgres")
+else:
+    configure()

@@ -42,7 +42,8 @@ jobs:
           GOBIN="$RUNNER_TEMP" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$RUNNER_TEMP/actionlint" -color
           shellcheck -x -P SCRIPTDIR -S warning run.sh cloudflared/*.sh matrix/*.sh \
-            network/{tor,haproxy,runtime}/*.sh .github/scripts/{scan-images,test-stack}.sh
+            matrix/postgres/*.sh network/{tor,haproxy,runtime}/*.sh \
+            .github/scripts/{scan-images,test-matrix,test-stack}.sh
           python3 -m py_compile matrix/*.py
 
       - name: Validate both Compose configurations
@@ -64,13 +65,16 @@ jobs:
                 end)
               '
             docker compose --env-file .github/scripts/compose-test.env \
-              -f compose.yaml -f "compose.$mode.yaml" -f compose.matrix.yaml config --format json |
+              -f compose.yaml -f "compose.$mode.yaml" -f compose.matrix.yaml \
+              -f compose.matrix.postgres.yaml config --format json |
               jq -e '
                 all(.services[]; (.ports // []) == [])
-                and .networks.matrix_backend.internal
-                and ((.services.synapse.networks | keys) == ["matrix_backend"])
+                and .networks.matrix_backend.internal and .networks.matrix_database.internal
+                and ((.services.synapse.networks | keys) == ["matrix_backend", "matrix_database"])
+                and ((.services.postgres.networks | keys) == ["matrix_database"])
+                and all(.services.synapse, .services.postgres; .read_only and .cap_drop == ["ALL"])
                 and ((.services.nginx.networks | keys) == ["internal_network", "matrix_backend"])
-                and (.services.cloudflared.networks | has("matrix_backend") | not)
+                and (.services.cloudflared.networks | (has("matrix_backend") or has("matrix_database")) | not)
               '
           done
 
@@ -149,6 +153,7 @@ jobs:
         run: |
           bash .github/scripts/test-stack.sh direct
           bash .github/scripts/test-stack.sh tor
+          bash .github/scripts/test-matrix.sh
 
       - name: Download Grype
         id: grype
