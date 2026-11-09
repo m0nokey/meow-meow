@@ -41,8 +41,9 @@ jobs:
           fi
           GOBIN="$RUNNER_TEMP" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$RUNNER_TEMP/actionlint" -color
-          shellcheck -x -P SCRIPTDIR -S warning run.sh cloudflared/*.sh \
+          shellcheck -x -P SCRIPTDIR -S warning run.sh cloudflared/*.sh matrix/*.sh \
             network/{tor,haproxy,runtime}/*.sh .github/scripts/{scan-images,test-stack}.sh
+          python3 -m py_compile matrix/*.py
 
       - name: Validate both Compose configurations
         run: |
@@ -61,6 +62,15 @@ jobs:
                   ((.services | keys) == ["cloudflared", "haproxy", "nginx", "tor_a", "tor_b"])
                   and ((.services.cloudflared.networks | keys) == ["internal_network"])
                 end)
+              '
+            docker compose --env-file .github/scripts/compose-test.env \
+              -f compose.yaml -f "compose.$mode.yaml" -f compose.matrix.yaml config --format json |
+              jq -e '
+                all(.services[]; (.ports // []) == [])
+                and .networks.matrix_backend.internal
+                and ((.services.synapse.networks | keys) == ["matrix_backend"])
+                and ((.services.nginx.networks | keys) == ["internal_network", "matrix_backend"])
+                and (.services.cloudflared.networks | has("matrix_backend") | not)
               '
           done
 

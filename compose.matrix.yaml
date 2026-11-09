@@ -1,0 +1,43 @@
+services:
+  nginx:
+    volumes:
+      - ./matrix/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./matrix/join.html:/srv/matrix-join.html:ro
+    networks:
+      matrix_backend: {}
+
+
+  synapse:
+    image: matrixdotorg/synapse:v1.164.2
+    environment:
+      TZ: UTC
+      SYNAPSE_LOG_LEVEL: WARNING
+      SYNAPSE_REPORT_STATS: 'no'
+    init: true
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 96
+    security_opt: [no-new-privileges:true]
+    ipc: none
+    logging:
+      driver: none
+    volumes:
+      - matrix_data:/data
+    networks:
+      matrix_backend:
+        aliases: [matrix-origin]
+    healthcheck:
+      test: [CMD, python, -c, "from urllib.request import urlopen; urlopen('http://127.0.0.1:8008/health', timeout=3).close()"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+networks:
+  matrix_backend:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+
+volumes:
+  matrix_data:

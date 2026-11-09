@@ -4,3 +4,4 @@
 .env.direct
 .env.tor
 /.launch-lock/
+/.launching/
