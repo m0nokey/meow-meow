@@ -159,8 +159,8 @@ if [[ $image_mode == pull ]]; then
     compose pull --policy always
 else
     if [[ $mode == tor ]]; then
-        compose build tor_a haproxy
         ensure_meow_archive
+        compose build tor_a haproxy
     fi
     compose build cloudflared nginx
     if [[ $workload == matrix ]]; then
