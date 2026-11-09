@@ -1,3 +1,12 @@
+# syntax=docker/dockerfile:1.7
+FROM alpine:3.24 AS busybox-builder
+ARG APORTS_COMMIT=35f5eb2864e50dd4448758d31f3e2a32f733ab84
+RUN apk add --no-cache build-base bzip2 ca-certificates curl git linux-headers \
+        openssl-dev patch python3
+COPY --from=network_source runtime/build-busybox.sh runtime/minimize-busybox.py runtime/busybox-applets.txt /build-config/
+WORKDIR /src
+RUN /bin/sh /build-config/build-busybox.sh
+
 FROM alpine:3.24 AS unpack
 ARG TARGETARCH
 ARG MEOW_VERSION
@@ -26,15 +35,22 @@ RUN apk add --no-cache bash ca-certificates "zlib>=1.4-r0" \
     && printf '%s\n' UTC > /etc/timezone
 COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 COPY start-tunnel.sh /usr/local/bin/start-tunnel.sh
+COPY --chmod=0755 tunnel-url.sh /usr/local/bin/tunnel-url
 ENV NO_AUTOUPDATE=true HOME=/tmp
 WORKDIR /tmp
 ENTRYPOINT ["/bin/bash", "/usr/local/bin/start-tunnel.sh"]
 
 FROM base AS direct
+COPY --from=busybox-builder /out/busybox /bin/busybox
+RUN --mount=type=bind,from=network_source,source=runtime,target=/build-config \
+    /bin/sh /build-config/prune-busybox-links.sh && rm -f /usr/bin/ssl_client
 USER 65534:65534
 
 FROM base AS tor
 RUN apk add --no-cache bind-tools curl iproute2 iptables su-exec
 COPY --from=unpack /usr/local/bin/meow /usr/local/bin/meow
 COPY meow.yaml /etc/meow/config.yaml
+COPY --from=busybox-builder /out/busybox /bin/busybox
+RUN --mount=type=bind,from=network_source,source=runtime,target=/build-config \
+    /bin/sh /build-config/prune-busybox-links.sh && rm -f /usr/bin/ssl_client
 RUN meow -v

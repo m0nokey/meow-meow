@@ -11,6 +11,7 @@
 !haproxy/haproxy.cfg.template
 !haproxy/render-haproxy-config.sh
 !runtime/
+!runtime/build-busybox.sh
 !runtime/build-python-socket.py
 !runtime/busybox-applets.txt
 !runtime/cpython-143924.patch

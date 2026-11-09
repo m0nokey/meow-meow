@@ -26,7 +26,7 @@ save_tunnel_url() {
 rm -f /run/tunnel-url /run/tunnel-url.tmp
 
 if [[ ${MEOW_MODE:?} == direct ]]; then
-    cloudflared tunnel --protocol http2 --edge-ip-version 4 --grace-period 5s \
+    cloudflared tunnel --protocol http2 --metrics 127.0.0.1:20241 --edge-ip-version 4 --grace-period 5s \
         --url http://nginx:8080 > >(save_tunnel_url) 2>&1 &
     children+=("$!")
     wait "${children[0]}"
@@ -55,7 +55,7 @@ for ((attempt = 1; attempt <= 30; attempt++)); do
     if [[ $srv =~ [[:space:]]7844[[:space:]] ]] &&
         su-exec nobody curl --noproxy api.trycloudflare.com -sS --connect-timeout 8 --max-time 15 \
             -o /dev/null https://api.trycloudflare.com/ 2>/dev/null; then
-        su-exec nobody cloudflared tunnel --protocol http2 --edge-ip-version 4 \
+        su-exec nobody cloudflared tunnel --protocol http2 --metrics 127.0.0.1:20241 --edge-ip-version 4 \
             --grace-period 5s --url "http://$ORIGIN_IP:8080" > >(save_tunnel_url) 2>&1 &
         children+=("$!")
         wait -n "${children[@]}"

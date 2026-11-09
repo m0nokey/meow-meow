@@ -20,17 +20,25 @@ def check_image(image_id, entrypoint, *args, stdin=None):
     return result.returncode == 0
 
 
-def verified_findings(image_id):
+def verified_findings(image_id, network_runtime):
     findings = {}
     if check_image(
         image_id, "/bin/sh", "-ec",
         'applets="$(busybox --list)"; ! echo "$applets" | grep -qx wget && ! command -v wget',
     ):
-        for package in ("busybox", "busybox-binsh", "ssl_client"):
+        for package in ("busybox", "busybox-binsh"):
             findings[("CVE-2025-60876", package, "1.37.0-r31")] = (
                 "not_affected",
                 "The BusyBox wget applet is disabled and no wget command is installed.",
             )
+        if check_image(image_id, "/bin/sh", "-ec", "test ! -e /usr/bin/ssl_client && ! command -v ssl_client"):
+            findings[("CVE-2025-60876", "ssl_client", "1.37.0-r31")] = (
+                "not_affected",
+                "Both the BusyBox wget applet and the ssl_client executable are absent.",
+            )
+
+    if not network_runtime:
+        return findings
 
     if check_image(image_id, "/bin/sh", "-ec", "! command -v sqlite3"):
         findings[("CVE-2026-119586", "sqlite-libs", "3.54.1-r0")] = (
@@ -104,7 +112,7 @@ def main():
         raise SystemExit("Raw Grype report does not identify the verified image")
 
     product = f"pkg:oci/{name}?repository_url={quote(repository, safe='')}&tag={tag}"
-    verified = verified_findings(args.image_id)
+    verified = verified_findings(args.image_id, name in {"meow-meow-tor", "meow-meow-haproxy"})
     statements = build_statements(report["matches"], verified, product)
     if statements:
         document = {
@@ -116,6 +124,8 @@ def main():
             "statements": statements,
         }
         args.output.write_text(json.dumps(document, indent=2) + "\n")
+    else:
+        args.output.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

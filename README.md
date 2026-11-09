@@ -7,7 +7,7 @@ Test or share a local website with a free, temporary `*.trycloudflare.com` URL. 
 
 ## Quick start
 
-Requires Bash and Docker Compose on Linux or Docker Desktop on macOS. Images support `amd64` and `arm64`.
+Requires Bash and Docker Compose on Linux or Docker Desktop on macOS. Images support `amd64` and `arm64`. Local builds require Docker Compose 2.17 or later.
 
 ```sh
 git clone https://github.com/m0nokey/meow-meow.git

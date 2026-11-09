@@ -20,21 +20,15 @@ for image in "${images[@]}"; do
     report="security-reports/$report_name"
     raw_sarif="security-reports/before-vex/$report_name.sarif"
     verified_sarif="security-reports/verified/$report_name.sarif"
-    if [[ $image == tor || $image == haproxy ]]; then
-        scan_tag="meow-vex.local/meow-meow-$image:${image_id#sha256:}"
-        docker image tag "$image_id" "$scan_tag"
-        target="docker:$scan_tag"
-    else
-        target="docker:$reference"
-    fi
+    scan_tag="meow-vex.local/meow-meow-$image:${image_id#sha256:}"
+    docker image tag "$image_id" "$scan_tag"
+    target="docker:$scan_tag"
 
     "$grype" "$target" -o json > "$report.json"
     scan_args=("$target")
-    if [[ $image == tor || $image == haproxy ]]; then
-        python3 .github/scripts/image-vex.py "$image_id" "$scan_tag" "$report.json" "$report.openvex.json"
-        if [[ -s $report.openvex.json ]]; then
-            scan_args+=(--vex "$report.openvex.json")
-        fi
+    python3 .github/scripts/image-vex.py "$image_id" "$scan_tag" "$report.json" "$report.openvex.json"
+    if [[ -s $report.openvex.json ]]; then
+        scan_args+=(--vex "$report.openvex.json")
     fi
 
     "$grype" "$target" -o sarif > "$raw_sarif"

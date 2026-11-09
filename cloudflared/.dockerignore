@@ -1,6 +1,7 @@
 *
 !Dockerfile
 !start-tunnel.sh
+!tunnel-url.sh
 !meow.yaml
 !assets/
 !assets/meow-*.tar.gz

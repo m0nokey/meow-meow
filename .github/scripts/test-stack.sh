@@ -19,13 +19,24 @@ trap cleanup EXIT
 
 "$source_dir/run.sh" "$mode"
 
+nginx_container=$(compose ps -q nginx)
 for _ in {1..15}; do
-    if compose exec -T nginx wget -qO- http://127.0.0.1:8080/ > "$RUNNER_TEMP/meow-index.html"; then
+    if docker run --rm --network "container:$nginx_container" curlimages/curl:latest \
+        -fsS --max-time 5 http://127.0.0.1:8080/ > "$RUNNER_TEMP/meow-index.html"; then
         break
     fi
     sleep 2
 done
 cmp "$source_dir/nginx/html/index.html" "$RUNNER_TEMP/meow-index.html"
+
+for service in nginx cloudflared; do
+    docker run --rm --network none --entrypoint /bin/sh "$(compose images -q "$service")" -ec '
+        applets="$(busybox --list)"
+        ! printf "%s\n" "$applets" | grep -qx wget &&
+            ! command -v wget &&
+            test ! -e /usr/bin/ssl_client
+    '
+done
 
 if [[ $mode == tor ]]; then
     # Verify the live rule set and make an actual direct connection attempt.

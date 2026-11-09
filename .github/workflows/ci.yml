@@ -41,7 +41,7 @@ jobs:
           fi
           GOBIN="$RUNNER_TEMP" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$RUNNER_TEMP/actionlint" -color
-          shellcheck -x -P SCRIPTDIR -S warning run.sh cloudflared/start-tunnel.sh \
+          shellcheck -x -P SCRIPTDIR -S warning run.sh cloudflared/*.sh \
             network/{tor,haproxy,runtime}/*.sh .github/scripts/{scan-images,test-stack}.sh
 
       - name: Validate both Compose configurations

@@ -97,7 +97,7 @@ if [[ $project != "$source_dir" ]]; then
         "$source_dir/compose.direct.yaml" "$source_dir/compose.tor.yaml" "$project/"
     cp -R "$source_dir/lib" "$source_dir/network" "$project/"
     mkdir -p "$project/cloudflared"
-    for config in .dockerignore Dockerfile meow.yaml resolv.conf start-tunnel.sh; do
+    for config in .dockerignore Dockerfile meow.yaml resolv.conf start-tunnel.sh tunnel-url.sh; do
         cp "$source_dir/cloudflared/$config" "$project/cloudflared/"
     done
     cp "$source_dir/nginx/.dockerignore" "$source_dir/nginx/Dockerfile" "$source_dir/nginx/nginx.conf" "$project/nginx/"
@@ -157,7 +157,7 @@ if [[ $mode == tor ]]; then
 else
     printf '\nAllow about 1–2 minutes after startup for cloudflared to obtain a public URL from Cloudflare.\n'
 fi
-printf '\n%s exec -T cloudflared cat /run/tunnel-url\n' "$command_prefix"
+printf '\n%s exec -T cloudflared /usr/local/bin/tunnel-url\n' "$command_prefix"
 if [[ $mode == tor ]]; then
     printf '\nMonitor either Tor instance with Nyx.\n\n'
     printf '%s exec -it tor_a nyx --socket /run/tor/control.sock\n' "$command_prefix"

@@ -2,7 +2,10 @@ name: ${MEOW_PROJECT:-meow-meow}
 services:
   nginx:
     image: ${MEOW_IMAGE_PREFIX:-ghcr.io/m0nokey/meow-meow}-nginx:${MEOW_IMAGE_TAG:-latest}
-    build: ./nginx
+    build:
+      context: ./nginx
+      additional_contexts:
+        network_source: ./network
     environment:
       TZ: UTC
     logging:
@@ -31,6 +34,8 @@ services:
   cloudflared:
     build:
       context: ./cloudflared
+      additional_contexts:
+        network_source: ./network
     environment:
       TZ: UTC
     logging:
